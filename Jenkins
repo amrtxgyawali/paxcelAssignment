@@ -1,0 +1,77 @@
+pipeline {
+    agent any
+
+    environment {
+        // These will be loaded securely from Jenkins Credentials
+        OCP_SERVER = 'https://your-openshift-api-url:6443'
+        OCP_PROJECT = 'your-openshift-project'
+        APP_NAME = 'your-app-name'
+        // Assuming Snowflake credentials are also stored in Jenkins
+        SNOWFLAKE_USER = credentials('snowflake-username')
+        SNOWFLAKE_PASSWORD = credentials('snowflake-password')
+        SNOWFLAKE_URL = 'your-snowflake-url'  // This could also be credential if sensitive
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                git credentialsId: 'git-credentials-id', url: 'https://your-git-repo-url.git'
+            }
+        }
+
+        stage('Build Application') {
+            steps {
+                sh 'mvn clean package -DskipTests'
+            }
+        }
+
+        stage('Login to OpenShift') {
+            steps {
+                withCredentials([string(credentialsId: 'ocp-token-id', variable: 'OCP_TOKEN')]) {
+                    sh """
+                    oc login --token=$OCP_TOKEN --server=$OCP_SERVER
+                    oc project $OCP_PROJECT
+                    """
+                }
+            }
+        }
+
+        stage('Deploy Application') {
+            steps {
+                // Deploy the JAR to OpenShift using S2I or create a deployment
+                sh """
+                oc start-build $APP_NAME --from-file=target/your-app.jar --follow || \
+                oc new-app openjdk-17~https://your-git-repo-url.git --name=$APP_NAME
+                """
+            }
+        }
+
+        stage('Set Environment Variables') {
+            steps {
+                // Update DeploymentConfig with environment variables for Snowflake
+                sh """
+                oc set env dc/$APP_NAME \
+                    SNOWFLAKE_USER=$SNOWFLAKE_USER \
+                    SNOWFLAKE_PASSWORD=$SNOWFLAKE_PASSWORD \
+                    SNOWFLAKE_URL=$SNOWFLAKE_URL
+                """
+            }
+        }
+
+        stage('Expose Service (Optional)') {
+            steps {
+                // Expose the app if not already exposed
+                sh "oc expose svc/$APP_NAME || echo 'Service already exposed.'"
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Deployment to OpenShift successful!"
+        }
+        failure {
+            echo "Deployment failed!"
+        }
+    }
+}
