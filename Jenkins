@@ -36,6 +36,27 @@ pipeline {
             }
         }
 
+        stage('Check Java Version Before Deployment') {
+            steps {
+                echo 'Checking Java Version in existing pod (if any)...'
+                script {
+                    def appLabel = "app=${APP_NAME}"
+                    def podName = sh(
+                        script: "oc get pods --selector=${appLabel} --no-headers | awk '{print \$1}' | head -n 1",
+                        returnStdout: true
+                    ).trim()
+                    
+                    echo "Pod Name Found: ${podName}"
+        
+                    if (podName) {
+                        sh "oc exec ${podName} -- java -version"
+                    } else {
+                        echo "No pod found yet for ${APP_NAME}. Skipping Java version check."
+                    }
+                }
+            }
+        }
+
         stage('Deploy Application') {
             steps {
                 // Deploy the JAR to OpenShift using S2I or create a deployment
