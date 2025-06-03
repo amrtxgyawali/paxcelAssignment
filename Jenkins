@@ -36,26 +36,7 @@ pipeline {
             }
         }
 
-        stage('Check Java Version Before Deployment') {
-            steps {
-                echo 'Checking Java Version in existing pod (if any)...'
-                script {
-                    def appLabel = "app=${APP_NAME}"
-                    def podName = sh(
-                        script: "oc get pods --selector=${appLabel} --no-headers | awk '{print \$1}' | head -n 1",
-                        returnStdout: true
-                    ).trim()
-                    
-                    echo "Pod Name Found: ${podName}"
         
-                    if (podName) {
-                        sh "oc exec ${podName} -- java -version"
-                    } else {
-                        echo "No pod found yet for ${APP_NAME}. Skipping Java version check."
-                    }
-                }
-            }
-        }
 
         stage('Deploy Application') {
             steps {
@@ -66,6 +47,31 @@ pipeline {
                 """
             }
         }
+
+stage('Check Java Version After Deployment') {
+    steps {
+        echo 'Waiting for pod to be ready and checking Java Version...'
+        script {
+            def appLabel = "app=${APP_NAME}"
+            // Wait for the pod to be ready
+            sh '''
+            for i in {1..30}; do
+              POD=$(oc get pods --selector='${appLabel}' --field-selector=status.phase=Running --no-headers | awk '{print $1}' | head -n 1)
+              if [ ! -z "$POD" ]; then
+                echo "Pod is running: $POD"
+                break
+              fi
+              echo "Waiting for pod to be ready..."
+              sleep 10
+            done
+            if [ -z "$POD" ]; then
+              echo "Pod not found after waiting."
+              exit 1
+            fi
+            oc exec $POD -- java -version
+            '''
+        }
+    }
 
         stage('Set Environment Variables') {
             steps {
