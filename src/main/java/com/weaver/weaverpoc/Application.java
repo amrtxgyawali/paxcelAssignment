@@ -1,4 +1,4 @@
-package com.paxcel.assignment;
+package com.weaver.weaverpoc;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
